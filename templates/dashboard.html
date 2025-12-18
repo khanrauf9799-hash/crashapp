@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crash Pattern Engine</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+            color: #fff;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .header h1 {
+            font-size: 22px;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-tabs {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        .nav-tab {
+            padding: 8px 14px;
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+        .nav-tab.active { color: #48dbfb; border-bottom-color: #48dbfb; }
+        .nav-tab:hover { color: #fff; }
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4757;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.connected { background: #2ed573; }
+        .status-dot.paused { background: #feca57; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .view { display: none; }
+        .view.active { display: block; }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1700px;
+            margin: 0 auto;
+        }
+        .container.wide { grid-template-columns: 1fr; }
+        @media (max-width: 1200px) { .container { grid-template-columns: 1fr; } }
+        .panel {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+        .panel-title {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #48dbfb, #1dd1a1);
+            color: #fff;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(72, 219, 251, 0.3); }
+        .btn-secondary { background: #16213e; color: #888; border: 1px solid #333; }
+        .btn-secondary:hover { background: #1a2854; color: #fff; }
+        .btn-danger { background: linear-gradient(135deg, #ff4757, #c0392b); color: #fff; }
+        .btn-warning { background: linear-gradient(135deg, #feca57, #f39c12); color: #000; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(20, 1fr);
+            gap: 3px;
+        }
+        .color-cell {
+            aspect-ratio: 1;
+            border-radius: 3px;
+            transition: transform 0.2s;
+            cursor: pointer;
+            min-width: 12px;
+        }
+        .color-cell:hover { transform: scale(1.3); z-index: 10; }
+        .color-cell.red { background: linear-gradient(135deg, #ff4757, #c0392b); }
+        .color-cell.green { background: linear-gradient(135deg, #2ed573, #27ae60); }
+        .color-cell.yellow { background: linear-gradient(135deg, #feca57, #f39c12); }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: #1a1a2e;
+            border-radius: 12px;
+            border: 1px solid #333;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 30px;
+        }
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; margin-bottom: 6px; font-weight: bold; font-size: 13px; color: #48dbfb; }
+        .form-input, .form-select {
+            width: 100%;
+            padding: 10px;
+            background: #16213e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #fff;
+            font-family: inherit;
+        }
+        .form-input:focus, .form-select:focus { outline: none; border-color: #48dbfb; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; }
+        .toggle { display: flex; align-items: center; gap: 10px; }
+        .toggle-switch {
+            width: 50px;
+            height: 28px;
+            background: #333;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+            border: none;
+            position: relative;
+        }
+        .toggle-switch.active { background: #2ed573; }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 12px;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+        .toggle-switch.active::after { left: 24px; }
+        .step-builder { background: #16213e; padding: 15px; border-radius: 6px; margin-bottom: 10px; }
+        .step {
+            background: #0f0f1a;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            border-left: 3px solid #48dbfb;
+        }
+        .preview-box {
+            background: #0f0f1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            color: #ddd;
+            line-height: 1.6;
+            white-space: pre-line;
+        }
+        .pattern-card {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #48dbfb;
+            margin-bottom: 15px;
+        }
+        .pattern-card.triggered { border-left-color: #2ed573; }
+        .pattern-card.missed { border-left-color: #ff4757; }
+        .pattern-name { font-weight: bold; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+        .pattern-sequence {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .pattern-sequence .box {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+        }
+        .pattern-sequence .box.green { background: linear-gradient(135deg, #2ed573, #27ae60); }
+        .pattern-sequence .box.red { background: linear-gradient(135deg, #ff4757, #c0392b); }
+        .pattern-sequence .box.yellow { background: linear-gradient(135deg, #feca57, #f39c12); }
+        .sequence-step {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #fff;
+        }
+        .sequence-step.green { background: linear-gradient(135deg, #2ed573, #27ae60); }
+        .sequence-step.red { background: linear-gradient(135deg, #ff4757, #c0392b); }
+        .sequence-step.yellow { background: linear-gradient(135deg, #feca57, #f39c12); color: #000; }
+        .pattern-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .pattern-stat-box {
+            padding: 8px;
+            text-align: center;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        .pattern-stat-box.current { background: #2196F3; color: #fff; }
+        .pattern-stat-box.maximum { background: #9C27B0; color: #fff; }
+        .pattern-stat-box .stat-num { font-size: 18px; }
+        .pattern-stat-box .stat-lbl { font-size: 10px; opacity: 0.9; }
+        .streak-table {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            font-size: 11px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .streak-table .cell {
+            padding: 6px 4px;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            border-right: 1px solid #333;
+        }
+        .streak-table .cell:nth-child(3n) { border-right: none; }
+        .streak-table .cell.header { background: #1a1a2e; color: #48dbfb; font-weight: bold; }
+        .streak-table .cell.green-bg { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
+        .streak-table .cell.red-bg { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
+        .pattern-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; margin-top: 8px; }
+        .pattern-stat { display: flex; justify-content: space-between; }
+        .pattern-stat-label { color: #888; }
+        .stat-card { background: #16213e; padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; }
+        .stat-value.red { color: #ff4757; }
+        .stat-value.green { color: #2ed573; }
+        .stat-value.yellow { color: #feca57; }
+        .stat-label { font-size: 11px; color: #888; margin-top: 5px; }
+        .last-crash {
+            text-align: center;
+            padding: 25px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            border-radius: 12px;
+            margin-bottom: 15px;
+        }
+        .last-crash-value { font-size: 42px; font-weight: bold; }
+        .last-crash-value.red { color: #ff4757; }
+        .last-crash-value.green { color: #2ed573; }
+        .last-crash-value.yellow { color: #feca57; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .alert-item {
+            background: #16213e;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            border-left: 4px solid #48dbfb;
+        }
+        .alert-item.trigger_streak { border-left-color: #2ed573; }
+        .alert-item.miss_streak { border-left-color: #ff4757; }
+        .alert-time { font-size: 11px; color: #888; }
+        .settings-section { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
+        .settings-title { font-size: 16px; margin-bottom: 15px; color: #48dbfb; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #2ed573;
+            color: #fff;
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: none;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.error { background: #ff4757; }
+        .toast.show { display: block; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #16213e; color: #48dbfb; font-size: 12px; text-transform: uppercase; }
+        tr:hover { background: rgba(72, 219, 251, 0.1); }
+        .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+        .page-btn {
+            padding: 8px 14px;
+            background: #16213e;
+            border: 1px solid #333;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        .page-btn.active { background: #48dbfb; color: #000; }
+        .page-btn:hover:not(.active) { background: #1a2854; }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; align-items: flex-end; }
+        .filter-group { flex: 1; min-width: 120px; }
+        .filter-group label { font-size: 11px; color: #888; display: block; margin-bottom: 4px; }
+        .filter-group input, .filter-group select { width: 100%; padding: 8px; background: #16213e; border: 1px solid #333; color: #fff; border-radius: 4px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .analytics-chart { background: #16213e; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .badge.red { background: #ff4757; }
+        .badge.green { background: #2ed573; }
+        .badge.yellow { background: #feca57; color: #000; }
+        .export-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>Crash Pattern Engine</h1>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showView('dashboard', this)">Dashboard</button>
+            <button class="nav-tab" onclick="showView('patterns', this)">Patterns Manager</button>
+            <button class="nav-tab" onclick="showView('history', this)">Round History</button>
+            <button class="nav-tab" onclick="showView('analytics', this)">Analytics</button>
+            <button class="nav-tab" onclick="showView('alerts', this)">Alerts</button>
+            <button class="nav-tab" onclick="showView('settings', this)">Settings</button>
+        </div>
+        <div class="header-controls">
+            <button class="btn btn-sm" id="pauseBtn" onclick="togglePause()">Pause Live</button>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <div id="dashboard" class="view active">
+        <div class="container">
+            <div class="main-content">
+                <div class="last-crash panel">
+                    <div class="last-crash-value" id="lastCrashValue">--</div>
+                    <div style="color: #888; margin-top: 8px;">Last Crash</div>
+                </div>
+                <div class="panel">
+                    <div class="flex-between" style="margin-bottom: 15px;">
+                        <div class="panel-title" style="margin: 0;">Live Color Chart (Last 200)</div>
+                        <div class="export-btns">
+                            <button class="btn btn-sm btn-secondary" onclick="downloadData()">Download Excel</button>
+                            <button class="btn btn-sm btn-secondary" onclick="downloadChart('distribution')">Download Chart</button>
+                        </div>
+                    </div>
+                    <div class="color-grid" id="colorGrid"></div>
+                </div>
+                <div class="panel" style="margin-top: 15px;">
+                    <div class="panel-title">Quick Stats (Last 100)</div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                        <div class="stat-card">
+                            <div class="stat-value red" id="redCount">0</div>
+                            <div class="stat-label">Red (&lt;2.0x)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value green" id="greenCount">0</div>
+                            <div class="stat-label">Green (2-10x)</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value yellow" id="yellowCount">0</div>
+                            <div class="stat-label">Yellow (&gt;=10x)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Pattern Monitor</div>
+                    <div id="patternsList" style="max-height: 550px; overflow-y: auto;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="patterns" class="view">
+        <div class="container">
+            <div class="main-content">
+                <div class="panel">
+                    <div class="flex-between" style="margin-bottom: 20px;">
+                        <div class="panel-title" style="margin: 0;">Pattern Manager (DSL)</div>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-secondary" onclick="downloadPatternAnalysis()">Export Analysis</button>
+                            <button class="btn btn-primary btn-sm" onclick="openPatternModal(null)">+ New Pattern</button>
+                        </div>
+                    </div>
+                    <div id="patternsList2" style="display: grid; gap: 12px;"></div>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Pattern Rules</div>
+                    <div style="font-size: 12px; color: #888; line-height: 1.6;">
+                        <p><strong>Trigger:</strong> Pattern matched = trigger_count++</p>
+                        <p><strong>Miss:</strong> Pattern not matched = miss_count++</p>
+                        <p><strong>Operators:</strong></p>
+                        <ul style="margin-left: 15px;">
+                            <li>Minimum: At least N colors</li>
+                            <li>Exact: Exactly N colors</li>
+                            <li>Maximum: At most N colors</li>
+                        </ul>
+                        <p style="margin-top: 10px;"><strong>Dynamic Patterns:</strong> X value expands to 3-8 sub-patterns</p>
+                    </div>
+                </div>
+                <div class="panel" style="margin-top: 15px;">
+                    <div class="panel-title">Top Trigger Streaks</div>
+                    <div id="topStreaks"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="history" class="view">
+        <div class="container wide">
+            <div class="panel">
+                <div class="flex-between" style="margin-bottom: 15px;">
+                    <div class="panel-title" style="margin: 0;">Round History</div>
+                    <button class="btn btn-sm btn-secondary" onclick="downloadData()">Export to Excel</button>
+                </div>
+                <div class="filter-bar">
+                    <div class="filter-group">
+                        <label>Color Filter</label>
+                        <select id="filterColor" onchange="loadHistory()">
+                            <option value="">All Colors</option>
+                            <option value="red">Red</option>
+                            <option value="green">Green</option>
+                            <option value="yellow">Yellow</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Min Value</label>
+                        <input type="number" id="filterMinValue" placeholder="e.g. 1.0" step="0.1" onchange="loadHistory()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Max Value</label>
+                        <input type="number" id="filterMaxValue" placeholder="e.g. 100" step="0.1" onchange="loadHistory()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Date From</label>
+                        <input type="date" id="filterDateFrom" onchange="loadHistory()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Date To</label>
+                        <input type="date" id="filterDateTo" onchange="loadHistory()">
+                    </div>
+                    <button class="btn btn-sm btn-secondary" onclick="clearFilters()">Clear</button>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Round Number</th>
+                                <th>Game ID</th>
+                                <th>Crash Value</th>
+                                <th>Color</th>
+                                <th>Source</th>
+                                <th>Max Rate</th>
+                                <th>Total Bet</th>
+                                <th>Total Win</th>
+                                <th>Total Profit</th>
+                                <th>Players</th>
+                                <th>Bet Count</th>
+                                <th>Hash</th>
+                                <th>Timestamp</th>
+                                <th>Date/Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="historyPagination"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="analytics" class="view">
+        <div class="container wide">
+            <div class="panel">
+                <div class="flex-between" style="margin-bottom: 20px;">
+                    <div class="panel-title" style="margin: 0;">Analytics Dashboard</div>
+                    <div class="btn-group">
+                        <select id="analyticsRange" onchange="loadDetailedAnalytics()">
+                            <option value="100">Last 100 Rounds</option>
+                            <option value="500" selected>Last 500 Rounds</option>
+                            <option value="1000">Last 1000 Rounds</option>
+                        </select>
+                        <button class="btn btn-sm btn-secondary" onclick="downloadChart('distribution')">Download Pie Chart</button>
+                        <button class="btn btn-sm btn-secondary" onclick="downloadChart('timeline')">Download Timeline</button>
+                        <button class="btn btn-sm btn-secondary" onclick="downloadChart('patterns')">Download Pattern Chart</button>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalRoundsAnalytics">0</div>
+                        <div class="stat-label">Total Rounds Analyzed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value red" id="redPercent">0%</div>
+                        <div class="stat-label">Red Percentage</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value green" id="greenPercent">0%</div>
+                        <div class="stat-label">Green Percentage</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value yellow" id="yellowPercent">0%</div>
+                        <div class="stat-label">Yellow Percentage</div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                    <div class="analytics-chart">
+                        <h3 style="margin-bottom: 15px; color: #48dbfb;">Value Statistics</h3>
+                        <div style="display: grid; gap: 10px;">
+                            <div class="flex-between"><span style="color: #888;">Average Value:</span><span id="avgValue">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Max Value:</span><span id="maxValue">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Min Value:</span><span id="minValue">0</span></div>
+                        </div>
+                    </div>
+                    <div class="analytics-chart">
+                        <h3 style="margin-bottom: 15px; color: #ff4757;">Red Streak Stats</h3>
+                        <div style="display: grid; gap: 10px;">
+                            <div class="flex-between"><span style="color: #888;">Max Streak:</span><span id="redMaxStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Avg Streak:</span><span id="redAvgStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Total Streaks:</span><span id="redStreakCount">0</span></div>
+                        </div>
+                    </div>
+                    <div class="analytics-chart">
+                        <h3 style="margin-bottom: 15px; color: #2ed573;">Green Streak Stats</h3>
+                        <div style="display: grid; gap: 10px;">
+                            <div class="flex-between"><span style="color: #888;">Max Streak:</span><span id="greenMaxStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Avg Streak:</span><span id="greenAvgStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Total Streaks:</span><span id="greenStreakCount">0</span></div>
+                        </div>
+                    </div>
+                    <div class="analytics-chart">
+                        <h3 style="margin-bottom: 15px; color: #feca57;">Yellow Streak Stats</h3>
+                        <div style="display: grid; gap: 10px;">
+                            <div class="flex-between"><span style="color: #888;">Max Streak:</span><span id="yellowMaxStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Avg Streak:</span><span id="yellowAvgStreak">0</span></div>
+                            <div class="flex-between"><span style="color: #888;">Total Streaks:</span><span id="yellowStreakCount">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="alerts" class="view">
+        <div class="container">
+            <div class="main-content">
+                <div class="panel">
+                    <div class="flex-between" style="margin-bottom: 20px;">
+                        <div class="panel-title" style="margin: 0;">Recent Alerts</div>
+                        <button class="btn btn-danger btn-sm" onclick="clearAlerts()">Clear All</button>
+                    </div>
+                    <div id="alertsList" style="max-height: 600px; overflow-y: auto;"></div>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Alert Statistics</div>
+                    <div style="display: grid; gap: 10px;">
+                        <div class="stat-card">
+                            <div class="stat-value green" id="triggerAlertCount">0</div>
+                            <div class="stat-label">Trigger Alerts</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value red" id="missAlertCount">0</div>
+                            <div class="stat-label">Miss Alerts</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings" class="view">
+        <div class="container">
+            <div class="main-content">
+                <div class="panel">
+                    <div class="panel-title">System Settings</div>
+                    <div class="settings-section">
+                        <div class="settings-title">Color Mapping Rules</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Red Max (values below = Red)</label>
+                                <input type="number" step="0.1" class="form-input" id="redMaxValue" value="2.0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Green Max (values below = Green, above = Yellow)</label>
+                                <input type="number" step="0.1" class="form-input" id="greenMaxValue" value="10.0">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveColorConfig()">Save Color Settings</button>
+                    </div>
+                    <div class="settings-section">
+                        <div class="settings-title">Notification Settings</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Telegram Bot Token</label>
+                                <input type="text" class="form-input" id="telegramToken" placeholder="Bot token">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Telegram Chat ID</label>
+                                <input type="text" class="form-input" id="telegramChatId" placeholder="Chat ID">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Webhook URL</label>
+                            <input type="text" class="form-input" id="webhookUrl" placeholder="https://your-webhook.com/endpoint">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Enabled Channels</label>
+                            <div style="display: flex; gap: 20px; margin-top: 10px;">
+                                <label><input type="checkbox" id="channelWebsocket" checked> Live UI</label>
+                                <label><input type="checkbox" id="channelTelegram"> Telegram</label>
+                                <label><input type="checkbox" id="channelWebhook"> Webhook</label>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveNotificationSettings()">Save Notification Settings</button>
+                    </div>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Connection Status</div>
+                    <div>
+                        <div style="margin-bottom: 10px;">
+                            <span style="color: #888;">Status:</span>
+                            <span id="connStatusText">Checking...</span>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <span style="color: #888;">Last Crash:</span>
+                            <span id="lastCrashInfo">--</span>
+                        </div>
+                        <div>
+                            <span style="color: #888;">Live Updates:</span>
+                            <span id="liveStatusText">Active</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="patternModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px;">Pattern Editor (DSL)</h2>
+            <form id="patternForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Pattern Name</label>
+                        <input type="text" class="form-input" id="patternName" placeholder="e.g., Pattern 1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Pattern Type</label>
+                        <select class="form-select" id="patternType" onchange="updatePatternType()">
+                            <option value="static">Static</option>
+                            <option value="dynamic">Dynamic</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group toggle">
+                        <label class="form-label" style="margin: 0;">Active</label>
+                        <button type="button" class="toggle-switch active" id="activeToggle" onclick="toggleSwitch(this)"></button>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <input type="number" class="form-input" id="patternPriority" value="0" step="1">
+                    </div>
+                </div>
+                <div class="form-group toggle">
+                    <label class="form-label" style="margin: 0;">Treat Yellow as Green</label>
+                    <button type="button" class="toggle-switch active" id="treatYellowToggle" onclick="toggleSwitch(this)"></button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Trigger Rule</label>
+                    <div class="step-builder" id="triggerBuilder"></div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addStep('triggerBuilder')">+ Add Step</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Miss Rule</label>
+                    <div class="step-builder" id="missBuilder"></div>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addStep('missBuilder')">+ Add Step</button>
+                </div>
+                <div id="dynamicPanel" style="display: none; margin-bottom: 20px;">
+                    <label class="form-label">Dynamic X Values</label>
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <label><input type="checkbox" value="3" class="dynamic-val" checked> 3</label>
+                        <label><input type="checkbox" value="4" class="dynamic-val" checked> 4</label>
+                        <label><input type="checkbox" value="5" class="dynamic-val" checked> 5</label>
+                        <label><input type="checkbox" value="6" class="dynamic-val" checked> 6</label>
+                        <label><input type="checkbox" value="7" class="dynamic-val" checked> 7</label>
+                        <label><input type="checkbox" value="8" class="dynamic-val" checked> 8</label>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 11px; color: #888;">Variable Label: X</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Pattern Preview (Auto)</label>
+                    <div class="preview-box" id="patternPreview"></div>
+                </div>
+                <div class="btn-group" style="margin-top: 20px;">
+                    <button type="button" class="btn btn-primary" onclick="savePattern()">Save</button>
+                    <button type="button" class="btn btn-primary" onclick="savePattern(true)">Save & Activate</button>
+                    <button type="button" class="btn btn-secondary" onclick="duplicatePattern()">Duplicate</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePatternModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        let socket;
+        let rounds = [];
+        let patterns = [];
+        let alerts = [];
+        let currentEditingPatternId = null;
+        let isPaused = false;
+        let historyPage = 1;
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show' + (isError ? ' error' : '');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function showView(viewName, btn) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewName).classList.add('active');
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+
+            if (viewName === 'patterns') loadPatterns();
+            if (viewName === 'alerts') loadAlerts();
+            if (viewName === 'settings') loadSettings();
+            if (viewName === 'history') loadHistory();
+            if (viewName === 'analytics') loadDetailedAnalytics();
+        }
+
+        async function togglePause() {
+            const endpoint = isPaused ? '/api/live/resume' : '/api/live/pause';
+            await fetch(endpoint, { method: 'POST' });
+            isPaused = !isPaused;
+            updatePauseUI();
+        }
+
+        function updatePauseUI() {
+            const btn = document.getElementById('pauseBtn');
+            const dot = document.getElementById('statusDot');
+            const liveText = document.getElementById('liveStatusText');
+            
+            btn.textContent = isPaused ? 'Resume Live' : 'Pause Live';
+            btn.className = isPaused ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-secondary';
+            
+            if (isPaused) {
+                dot.classList.add('paused');
+                if (liveText) liveText.textContent = 'Paused';
+            } else {
+                dot.classList.remove('paused');
+                if (liveText) liveText.textContent = 'Active';
+            }
+        }
+
+        function initSocket() {
+            socket = io({ transports: ['websocket', 'polling'] });
+
+            socket.on('connect', () => {
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Connected';
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Disconnected';
+            });
+
+            socket.on('round_added', (data) => {
+                if (isPaused) return;
+                rounds.push(data);
+                if (rounds.length > 200) rounds.shift();
+                updateDashboard();
+            });
+
+            socket.on('pattern_event', (data) => {
+                if (isPaused) return;
+                patterns = patterns.map(p => {
+                    const baseId = typeof data.pattern_id === 'string'
+                        ? parseInt(data.pattern_id.split(':')[0].split('_')[0])
+                        : data.pattern_id;
+                    return p.id == baseId ? {...p, stats: data.stats} : p;
+                });
+                updatePatternsList();
+            });
+
+            socket.on('pattern_alert', (data) => {
+                alerts.unshift({...data, created_at: new Date().toISOString()});
+                if (alerts.length > 50) alerts.pop();
+                updateAlertsList();
+                showToast(`Alert: ${data.pattern_name} - ${data.event} (streak: ${data.streak})`);
+            });
+        }
+
+        async function loadPatterns() {
+            const res = await fetch('/api/patterns');
+            patterns = await res.json();
+            updatePatternsList2();
+            loadTopStreaks();
+        }
+
+        async function loadAlerts() {
+            const res = await fetch('/api/alerts?limit=50');
+            alerts = await res.json();
+            updateAlertsList();
+        }
+
+        async function loadSettings() {
+            const [colorRes, notifRes, connRes, liveRes] = await Promise.all([
+                fetch('/api/colors/config'),
+                fetch('/api/notifications/settings'),
+                fetch('/api/connection/status'),
+                fetch('/api/live/status')
+            ]);
+            
+            const colorConfig = await colorRes.json();
+            document.getElementById('redMaxValue').value = colorConfig.red_max || 2.0;
+            document.getElementById('greenMaxValue').value = colorConfig.green_max || 10.0;
+            
+            const notifSettings = await notifRes.json();
+            const channels = notifSettings.enabled_channels || ['websocket'];
+            document.getElementById('channelWebsocket').checked = channels.includes('websocket');
+            document.getElementById('channelTelegram').checked = channels.includes('telegram');
+            document.getElementById('channelWebhook').checked = channels.includes('webhook');
+
+            const connStatus = await connRes.json();
+            document.getElementById('connStatusText').textContent = connStatus.connected ? 'Connected' : 'Simulating';
+            document.getElementById('connStatusText').style.color = connStatus.connected ? '#2ed573' : '#feca57';
+            document.getElementById('lastCrashInfo').textContent = connStatus.last_crash ? connStatus.last_crash + 'x' : '--';
+
+            const liveStatus = await liveRes.json();
+            isPaused = liveStatus.paused;
+            updatePauseUI();
+        }
+
+        async function loadHistory() {
+            const color = document.getElementById('filterColor').value;
+            const minVal = document.getElementById('filterMinValue').value;
+            const maxVal = document.getElementById('filterMaxValue').value;
+            const dateFrom = document.getElementById('filterDateFrom').value;
+            const dateTo = document.getElementById('filterDateTo').value;
+
+            let url = `/api/rounds/history?page=${historyPage}&per_page=50`;
+            if (color) url += `&color=${color}`;
+            if (minVal) url += `&min_value=${minVal}`;
+            if (maxVal) url += `&max_value=${maxVal}`;
+            if (dateFrom) url += `&date_from=${dateFrom}`;
+            if (dateTo) url += `&date_to=${dateTo}`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = data.rounds.map(r => `
+                <tr>
+                    <td>${r.id}</td>
+                    <td>${r.round_number}</td>
+                    <td>${r.game_id ?? '--'}</td>
+                    <td><strong>${r.crash_value.toFixed(2)}x</strong></td>
+                    <td><span class="badge ${r.color}">${r.color.toUpperCase()}</span></td>
+                    <td>${r.source}</td>
+                    <td>${r.max_rate ?? '--'}</td>
+                    <td>${r.total_bet_amount ?? '--'}</td>
+                    <td>${r.total_win_amount ?? '--'}</td>
+                    <td>${r.total_profit_amount ?? '--'}</td>
+                    <td>${r.player_count ?? '--'}</td>
+                    <td>${r.bet_count ?? '--'}</td>
+                    <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.hash_value ?? ''}">${r.hash_value ?? '--'}</td>
+                    <td>${r.timestamp ?? '--'}</td>
+                    <td>${r.created_at ? new Date(r.created_at).toLocaleString() : '--'}</td>
+                </tr>
+            `).join('');
+
+            renderPagination(data.page, data.total_pages);
+        }
+
+        function renderPagination(current, total) {
+            const container = document.getElementById('historyPagination');
+            let html = '';
+            
+            html += `<button class="page-btn" onclick="goToPage(1)" ${current === 1 ? 'disabled' : ''}>First</button>`;
+            html += `<button class="page-btn" onclick="goToPage(${current - 1})" ${current === 1 ? 'disabled' : ''}>Prev</button>`;
+            
+            for (let i = Math.max(1, current - 2); i <= Math.min(total, current + 2); i++) {
+                html += `<button class="page-btn ${i === current ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+            }
+            
+            html += `<button class="page-btn" onclick="goToPage(${current + 1})" ${current === total ? 'disabled' : ''}>Next</button>`;
+            html += `<button class="page-btn" onclick="goToPage(${total})" ${current === total ? 'disabled' : ''}>Last</button>`;
+            
+            container.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            historyPage = page;
+            loadHistory();
+        }
+
+        function clearFilters() {
+            document.getElementById('filterColor').value = '';
+            document.getElementById('filterMinValue').value = '';
+            document.getElementById('filterMaxValue').value = '';
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            historyPage = 1;
+            loadHistory();
+        }
+
+        async function loadDetailedAnalytics() {
+            const range = document.getElementById('analyticsRange').value;
+            const res = await fetch(`/api/analytics/detailed?range=${range}`);
+            const data = await res.json();
+
+            document.getElementById('totalRoundsAnalytics').textContent = data.total_rounds;
+            document.getElementById('redPercent').textContent = data.percentages.red + '%';
+            document.getElementById('greenPercent').textContent = data.percentages.green + '%';
+            document.getElementById('yellowPercent').textContent = data.percentages.yellow + '%';
+
+            document.getElementById('avgValue').textContent = data.value_stats.average + 'x';
+            document.getElementById('maxValue').textContent = data.value_stats.max + 'x';
+            document.getElementById('minValue').textContent = data.value_stats.min + 'x';
+
+            document.getElementById('redMaxStreak').textContent = data.streak_stats.red.max;
+            document.getElementById('redAvgStreak').textContent = data.streak_stats.red.avg;
+            document.getElementById('redStreakCount').textContent = data.streak_stats.red.count;
+
+            document.getElementById('greenMaxStreak').textContent = data.streak_stats.green.max;
+            document.getElementById('greenAvgStreak').textContent = data.streak_stats.green.avg;
+            document.getElementById('greenStreakCount').textContent = data.streak_stats.green.count;
+
+            document.getElementById('yellowMaxStreak').textContent = data.streak_stats.yellow.max;
+            document.getElementById('yellowAvgStreak').textContent = data.streak_stats.yellow.avg;
+            document.getElementById('yellowStreakCount').textContent = data.streak_stats.yellow.count;
+        }
+
+        async function loadTopStreaks() {
+            const res = await fetch('/api/streaks/top?limit=5&type=trigger');
+            const streaks = await res.json();
+            document.getElementById('topStreaks').innerHTML = streaks.length > 0 ? 
+                streaks.map(s => `
+                    <div style="padding: 8px; background: #0f0f1a; border-radius: 6px; margin-bottom: 8px;">
+                        <div style="font-weight: bold; font-size: 12px;">${s.pattern_name || 'Pattern'}</div>
+                        <div style="color: #2ed573; font-size: 18px;">${s.streak_length} streak</div>
+                    </div>
+                `).join('') : '<div style="color: #888; font-size: 12px;">No streaks recorded yet</div>';
+        }
+
+        async function loadInitialData() {
+            const [roundsRes, patternsRes, liveRes] = await Promise.all([
+                fetch('/api/rounds?limit=200'),
+                fetch('/api/patterns'),
+                fetch('/api/live/status')
+            ]);
+            rounds = await roundsRes.json();
+            patterns = await patternsRes.json();
+            const liveStatus = await liveRes.json();
+            isPaused = liveStatus.paused;
+            updatePauseUI();
+            updateDashboard();
+        }
+
+        function updateDashboard() {
+            updateColorGrid();
+            updateStats();
+            updateLastCrash();
+            updatePatternsList();
+        }
+
+        function updateColorGrid() {
+            const grid = document.getElementById('colorGrid');
+            grid.innerHTML = '';
+            rounds.slice(-200).forEach(r => {
+                const cell = document.createElement('div');
+                cell.className = `color-cell ${r.color}`;
+                cell.title = `${r.crash_value}x`;
+                grid.appendChild(cell);
+            });
+        }
+
+        function updateStats() {
+            const counts = { red: 0, green: 0, yellow: 0 };
+            rounds.slice(-100).forEach(r => counts[r.color]++);
+            document.getElementById('redCount').textContent = counts.red;
+            document.getElementById('greenCount').textContent = counts.green;
+            document.getElementById('yellowCount').textContent = counts.yellow;
+        }
+
+        function updateLastCrash() {
+            if (rounds.length === 0) return;
+            const last = rounds[rounds.length - 1];
+            document.getElementById('lastCrashValue').textContent = last.crash_value.toFixed(2) + 'x';
+            document.getElementById('lastCrashValue').className = `last-crash-value ${last.color}`;
+        }
+
+        async function updatePatternsList() {
+            const list = document.getElementById('patternsList');
+            try {
+                const res = await fetch('/api/patterns/dashboard');
+                const data = await res.json();
+                const dashboardPatterns = data.patterns || [];
+
+                list.innerHTML = dashboardPatterns.map(p => {
+                    const seq = Array.isArray(p.visual_sequence) ? p.visual_sequence : [];
+                    const sequenceHtml = seq.length > 0
+                        ? `<div class="pattern-sequence">${seq.map(c => `<div class="box ${c}"></div>`).join('')}</div>`
+                        : '<div style="color:#666;font-size:11px;text-align:center;">No preview</div>';
+
+                    const streakTableHtml = (p.streak_table || []).length > 0 ? `
+                        <div class="streak-table">
+                            <div class="cell header">Streak</div>
+                            <div class="cell header">Trigger</div>
+                            <div class="cell header">Miss</div>
+                            ${p.streak_table.map(row => `
+                                <div class="cell">${row.streak}</div>
+                                <div class="cell green-bg">${row.trigger_count}</div>
+                                <div class="cell red-bg">${row.miss_count}</div>
+                            `).join('')}
+                        </div>
+                    ` : '<div style="color: #666; font-size: 11px; text-align: center;">No streak data yet</div>';
+
+                    return `
+                        <div class="pattern-card ${p.stats?.current_trigger > 0 ? 'triggered' : p.stats?.current_miss > 0 ? 'missed' : ''}">
+                            <div class="pattern-name">
+                                <span>${p.name}</span>
+                                <span style="font-size: 10px; color: ${p.active ? '#2ed573' : '#ff4757'}">${p.active ? 'ACTIVE' : 'OFF'}</span>
+                            </div>
+                            ${sequenceHtml}
+                            <div class="pattern-stats-grid">
+                                <div class="pattern-stat-box current">
+                                    <div class="stat-num">${p.stats?.current_trigger || 0}</div>
+                                    <div class="stat-lbl">CURRENT TRIGGER</div>
+                                </div>
+                                <div class="pattern-stat-box current" style="background: #ff4757;">
+                                    <div class="stat-num">${p.stats?.current_miss || 0}</div>
+                                    <div class="stat-lbl">CURRENT MISS</div>
+                                </div>
+                                <div class="pattern-stat-box maximum">
+                                    <div class="stat-num">${p.stats?.max_trigger || 0}</div>
+                                    <div class="stat-lbl">MAX TRIGGER</div>
+                                </div>
+                                <div class="pattern-stat-box maximum" style="background: #8e44ad;">
+                                    <div class="stat-num">${p.stats?.max_miss || 0}</div>
+                                    <div class="stat-lbl">MAX MISS</div>
+                                </div>
+                            </div>
+                            ${streakTableHtml}
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = patterns.map(p => `
+                    <div class="pattern-card ${p.stats?.trigger_streak > 0 ? 'triggered' : p.stats?.miss_streak > 0 ? 'missed' : ''}">
+                        <div class="pattern-name">${p.name}</div>
+                        <div class="pattern-stats">
+                            <div class="pattern-stat">
+                                <span class="pattern-stat-label">Trigger</span>
+                                <span style="color: #2ed573">${p.stats?.trigger_streak || 0}</span>
+                            </div>
+                            <div class="pattern-stat">
+                                <span class="pattern-stat-label">Miss</span>
+                                <span style="color: #ff4757">${p.stats?.miss_streak || 0}</span>
+                            </div>
+                            <div class="pattern-stat">
+                                <span class="pattern-stat-label">Max</span>
+                                <span>${p.stats?.longest_trigger_streak || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function updatePatternsList2() {
+            const list = document.getElementById('patternsList2');
+            list.innerHTML = patterns.map(p => `
+                <div class="pattern-card">
+                    <div class="pattern-name">
+                        <span>${p.name} <span style="color: ${p.active ? '#2ed573' : '#ff4757'}; font-size: 11px;">(${p.active ? 'Active' : 'Inactive'})</span></span>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-secondary" onclick="togglePatternActive(${p.id}, ${!p.active})">${p.active ? 'Disable' : 'Enable'}</button>
+                            <button class="btn btn-sm btn-secondary" onclick="simulatePattern(${p.id})">Simulate</button>
+                            <button class="btn btn-sm btn-secondary" onclick="editPattern(${p.id})">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deletePattern(${p.id})">Delete</button>
+                        </div>
+                    </div>
+                    <div style="font-size: 11px; color: #888; margin: 5px 0;">Type: ${p.pattern_type}</div>
+                    <div class="pattern-stats">
+                        <div class="pattern-stat">
+                            <span class="pattern-stat-label">Total Triggers</span>
+                            <span style="color: #2ed573">${p.stats?.total_triggers || 0}</span>
+                        </div>
+                        <div class="pattern-stat">
+                            <span class="pattern-stat-label">Total Misses</span>
+                            <span style="color: #ff4757">${p.stats?.total_misses || 0}</span>
+                        </div>
+                        <div class="pattern-stat">
+                            <span class="pattern-stat-label">Max Streak</span>
+                            <span>${p.stats?.longest_trigger_streak || 0}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateAlertsList() {
+            const list = document.getElementById('alertsList');
+            let triggerCount = 0, missCount = 0;
+            
+            list.innerHTML = alerts.length > 0 ? alerts.map(a => {
+                if (a.alert_type === 'trigger_streak') triggerCount++;
+                else missCount++;
+                return `
+                    <div class="alert-item ${a.alert_type}">
+                        <div style="font-weight: bold;">${a.pattern_name || 'Pattern'}</div>
+                        <div style="color: ${a.alert_type === 'trigger_streak' ? '#2ed573' : '#ff4757'}">
+                            ${a.alert_type === 'trigger_streak' ? 'Trigger Streak' : 'Miss Streak'}: ${a.payload?.streak || a.streak || '--'}
+                        </div>
+                        <div class="alert-time">${new Date(a.created_at).toLocaleString()}</div>
+                    </div>
+                `;
+            }).join('') : '<div style="color: #888; text-align: center; padding: 20px;">No alerts yet</div>';
+
+            document.getElementById('triggerAlertCount').textContent = triggerCount;
+            document.getElementById('missAlertCount').textContent = missCount;
+        }
+
+        async function clearAlerts() {
+            if (!confirm('Clear all alerts?')) return;
+            await fetch('/api/alerts/clear', { method: 'POST' });
+            alerts = [];
+            updateAlertsList();
+            showToast('Alerts cleared');
+        }
+
+        async function saveColorConfig() {
+            const redMax = parseFloat(document.getElementById('redMaxValue').value);
+            const greenMax = parseFloat(document.getElementById('greenMaxValue').value);
+            await fetch('/api/colors/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ red_max: redMax, green_max: greenMax })
+            });
+            showToast('Color settings saved');
+        }
+
+        async function saveNotificationSettings() {
+            const channels = [];
+            if (document.getElementById('channelWebsocket').checked) channels.push('websocket');
+            if (document.getElementById('channelTelegram').checked) channels.push('telegram');
+            if (document.getElementById('channelWebhook').checked) channels.push('webhook');
+
+            await fetch('/api/notifications/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    telegram_token: document.getElementById('telegramToken').value,
+                    telegram_chat_id: document.getElementById('telegramChatId').value,
+                    webhook_url: document.getElementById('webhookUrl').value,
+                    enabled_channels: channels
+                })
+            });
+            showToast('Notification settings saved');
+        }
+
+        function downloadData() {
+            window.location.href = '/api/export/data?limit=1000';
+        }
+
+        function downloadPatternAnalysis() {
+            window.location.href = '/api/export/patterns';
+        }
+
+        function downloadChart(type) {
+            window.location.href = `/api/export/chart?type=${type}&limit=200`;
+        }
+
+        async function togglePatternActive(id, active) {
+            await fetch(`/api/patterns/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active })
+            });
+            loadPatterns();
+            showToast(`Pattern ${active ? 'enabled' : 'disabled'}`);
+        }
+
+        async function simulatePattern(id) {
+            showToast('Running simulation...');
+            const res = await fetch(`/api/patterns/${id}/simulate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit: 500 })
+            });
+            const result = await res.json();
+            let msg = `Simulation: ${result.pattern_name}\nTotal Rounds: ${result.total_rounds}\n`;
+            result.sub_patterns.forEach(sp => {
+                msg += `\n${sp.name}:\n  Triggers: ${sp.total_triggers} (${sp.trigger_rate}%)\n  Misses: ${sp.total_misses} (${sp.miss_rate}%)\n  Max Streak: ${sp.max_trigger_streak}`;
+            });
+            alert(msg);
+        }
+
+        function openPatternModal(patternId) {
+            currentEditingPatternId = patternId;
+            if (patternId) {
+                const p = patterns.find(x => x.id == patternId);
+                document.getElementById('patternName').value = p.name;
+                document.getElementById('patternType').value = p.pattern_type;
+                document.getElementById('activeToggle').classList.toggle('active', p.active !== false);
+                document.getElementById('patternPriority').value = p.priority ?? 0;
+                const rule = p.rule_json;
+                document.getElementById('treatYellowToggle').classList.toggle('active', rule.treat_yellow_as_green !== false);
+                renderStepBuilder('triggerBuilder', rule.trigger?.steps || []);
+                renderStepBuilder('missBuilder', rule.miss?.steps || []);
+                const dv = rule.dynamic_values || [3,4,5,6,7,8];
+                document.querySelectorAll('.dynamic-val').forEach(el => {
+                    el.checked = dv.includes(parseInt(el.value));
+                });
+                updatePatternType();
+            } else {
+                document.getElementById('patternForm').reset();
+                document.getElementById('activeToggle').classList.add('active');
+                document.getElementById('patternPriority').value = 0;
+                document.getElementById('treatYellowToggle').classList.add('active');
+                renderStepBuilder('triggerBuilder', []);
+                renderStepBuilder('missBuilder', []);
+                document.getElementById('dynamicPanel').style.display = 'none';
+            }
+            updatePatternPreview();
+            document.getElementById('patternModal').classList.add('active');
+        }
+
+        function closePatternModal() {
+            document.getElementById('patternModal').classList.remove('active');
+            currentEditingPatternId = null;
+        }
+
+        function duplicatePattern() {
+            currentEditingPatternId = null;
+            const name = document.getElementById('patternName').value;
+            document.getElementById('patternName').value = name + ' (Copy)';
+            showToast('Pattern duplicated - save to create new');
+        }
+
+        function toggleSwitch(el) { el.classList.toggle('active'); }
+
+        function updatePatternType() {
+            const type = document.getElementById('patternType').value;
+            document.getElementById('dynamicPanel').style.display = type === 'dynamic' ? 'block' : 'none';
+            updatePatternPreview();
+        }
+
+        function renderStepBuilder(builderId, steps) {
+            const builder = document.getElementById(builderId);
+            builder.innerHTML = steps.map((step, i) => createStepHTML(step, i)).join('');
+            updatePatternPreview();
+        }
+
+        function createStepHTML(step = {}, index = 0) {
+            const colors = step.colors || ['green_yellow'];
+            const operator = step.operator || 'minimum';
+            const count = step.count ?? 1;
+            return `
+                <div class="step" data-index="${index}">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 70px auto; gap: 8px; align-items: center;">
+                        <select class="form-select step-colors">
+                            <option value="green_yellow" ${colors.includes('green_yellow') ? 'selected' : ''}>Green/Yellow</option>
+                            <option value="red" ${colors.includes('red') ? 'selected' : ''}>Red</option>
+                            <option value="yellow" ${colors.includes('yellow') ? 'selected' : ''}>Yellow Only</option>
+                            <option value="green" ${colors.includes('green') ? 'selected' : ''}>Green Only</option>
+                        </select>
+                        <select class="form-select step-operator">
+                            <option value="minimum" ${operator === 'minimum' ? 'selected' : ''}>Minimum</option>
+                            <option value="exact" ${operator === 'exact' ? 'selected' : ''}>Exact</option>
+                            <option value="maximum" ${operator === 'maximum' ? 'selected' : ''}>Maximum</option>
+                        </select>
+                        <input type="text" class="form-input step-count" value="${count}" style="width: 60px;">
+                        <div class="btn-group" style="gap: 6px;">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="moveStep(this, -1)">↑</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="moveStep(this, 1)">↓</button>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="removeStep(this)">X</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function addStep(builderId) {
+            const builder = document.getElementById(builderId);
+            const index = builder.children.length;
+            builder.insertAdjacentHTML('beforeend', createStepHTML({}, index));
+            updatePatternPreview();
+        }
+
+        function removeStep(btn) { btn.closest('.step').remove(); updatePatternPreview(); }
+
+        function moveStep(btn, dir) {
+            const stepEl = btn.closest('.step');
+            const builder = stepEl.parentElement;
+            const siblings = Array.from(builder.querySelectorAll('.step'));
+            const idx = siblings.indexOf(stepEl);
+            const nextIdx = idx + dir;
+            if (nextIdx < 0 || nextIdx >= siblings.length) return;
+            if (dir < 0) {
+                builder.insertBefore(stepEl, siblings[nextIdx]);
+            } else {
+                builder.insertBefore(siblings[nextIdx], stepEl);
+            }
+            updatePatternPreview();
+        }
+
+        function getStepsFromBuilder(builderId) {
+            const builder = document.getElementById(builderId);
+            return Array.from(builder.querySelectorAll('.step')).map(step => ({
+                colors: [step.querySelector('.step-colors').value],
+                operator: step.querySelector('.step-operator').value,
+                count: (step.querySelector('.step-count').value || '1').trim()
+            }));
+        }
+
+        function stepToText(step) {
+            const colors = step.colors || [];
+            const op = step.operator || 'minimum';
+            const count = step.count ?? '1';
+
+            const colorLabel = colors.includes('green_yellow') ? 'Green/Yellow'
+                : colors.includes('red') ? 'Red'
+                : colors.includes('yellow') ? 'Yellow'
+                : colors.includes('green') ? 'Green'
+                : 'Color';
+
+            const opLabel = op === 'exact' ? 'exact' : op === 'minimum' ? 'min' : 'max';
+            return `${opLabel} ${count} ${colorLabel}`;
+        }
+
+        function updatePatternPreview() {
+            const el = document.getElementById('patternPreview');
+            if (!el) return;
+            const triggerSteps = getStepsFromBuilder('triggerBuilder');
+            const missSteps = getStepsFromBuilder('missBuilder');
+
+            let lines = [];
+            if (triggerSteps.length > 0) {
+                lines.push(`IF ${stepToText(triggerSteps[0])}`);
+                for (let i = 1; i < triggerSteps.length; i++) {
+                    const prefix = i === 1 ? 'THEN' : 'NEXT';
+                    lines.push(`${prefix} ${stepToText(triggerSteps[i])}`);
+                }
+            } else {
+                lines.push('IF (no trigger steps)');
+            }
+
+            if (missSteps.length > 0) {
+                lines.push('');
+                lines.push('MISS IF');
+                missSteps.forEach(s => lines.push(`- ${stepToText(s)}`));
+            }
+
+            el.textContent = lines.join('\n');
+        }
+
+        async function savePattern(activate = false) {
+            const name = document.getElementById('patternName').value;
+            if (!name) { showToast('Pattern name required', true); return; }
+            
+            const type = document.getElementById('patternType').value;
+            const treatYellowAsGreen = document.getElementById('treatYellowToggle').classList.contains('active');
+            const priority = parseInt(document.getElementById('patternPriority').value) || 0;
+            const active = activate ? true : document.getElementById('activeToggle').classList.contains('active');
+            const triggerSteps = getStepsFromBuilder('triggerBuilder');
+            const missSteps = getStepsFromBuilder('missBuilder');
+            
+            let dynamicValues = [];
+            if (type === 'dynamic') {
+                dynamicValues = Array.from(document.querySelectorAll('.dynamic-val:checked')).map(c => parseInt(c.value));
+            }
+
+            const rule = {
+                name, type,
+                treat_yellow_as_green: treatYellowAsGreen,
+                trigger: { steps: triggerSteps },
+                miss: { steps: missSteps },
+                active
+            };
+            if (type === 'dynamic') rule.dynamic_values = dynamicValues;
+
+            const url = currentEditingPatternId ? `/api/patterns/${currentEditingPatternId}` : '/api/patterns';
+            const method = currentEditingPatternId ? 'PUT' : 'POST';
+
+            await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description: '', pattern_type: type, rule_json: rule, active, priority })
+            });
+
+            closePatternModal();
+            loadPatterns();
+            showToast('Pattern saved');
+        }
+
+        function editPattern(id) { openPatternModal(id); }
+
+        async function deletePattern(id) {
+            if (!confirm('Delete this pattern?')) return;
+            await fetch(`/api/patterns/${id}`, { method: 'DELETE' });
+            loadPatterns();
+            showToast('Pattern deleted');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            loadInitialData();
+
+            document.body.addEventListener('input', (e) => {
+                if (e.target && (e.target.classList.contains('step-count') || e.target.classList.contains('step-operator') || e.target.classList.contains('step-colors'))) {
+                    updatePatternPreview();
+                }
+            });
+
+            document.body.addEventListener('change', (e) => {
+                if (e.target && e.target.classList.contains('dynamic-val')) {
+                    updatePatternPreview();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
