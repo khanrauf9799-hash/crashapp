@@ -882,19 +882,25 @@ def api_patterns_dashboard():
         miss_dist = miss_dist_map.get(p.id, {})
 
         streak_table = []
-        # Dynamic: compute top 12 longest unique streak lengths from dataset (trigger+miss)
-        all_lengths = sorted(set(trigger_dist.keys()) | set(miss_dist.keys()), reverse=True)
-        top_lengths = all_lengths[:12]
+        # Dynamic: compute top 12 longest unique streak lengths separately for trigger and miss
+        top_trigger_lengths = sorted(set(trigger_dist.keys()), reverse=True)[:12]
+        top_miss_lengths = sorted(set(miss_dist.keys()), reverse=True)[:12]
 
-        for length in top_lengths:
+        max_rows = max(len(top_trigger_lengths), len(top_miss_lengths), 12)
+        max_rows = min(max_rows, 12)
+
+        for i in range(max_rows):
+            t_len = top_trigger_lengths[i] if i < len(top_trigger_lengths) else None
+            m_len = top_miss_lengths[i] if i < len(top_miss_lengths) else None
             streak_table.append({
-                'streak': int(length),
-                'trigger_count': int(trigger_dist.get(length, 0)),
-                'miss_count': int(miss_dist.get(length, 0))
+                'trigger_streak': int(t_len) if t_len is not None else None,
+                'trigger_count': int(trigger_dist.get(t_len, 0)) if t_len is not None else 0,
+                'miss_streak': int(m_len) if m_len is not None else None,
+                'miss_count': int(miss_dist.get(m_len, 0)) if m_len is not None else 0
             })
 
-        # Client spec: flat mapping (trigger distribution) with no hardcoded streak keys
-        longest_trigger = {str(int(length)): int(trigger_dist.get(length, 0)) for length in top_lengths}
+        # Flat mapping (trigger distribution) with no hardcoded streak keys
+        longest_trigger = {str(int(length)): int(trigger_dist.get(length, 0)) for length in top_trigger_lengths}
 
         if rule.get('type') == 'dynamic':
             subs = PatternSubStats.query.filter_by(pattern_id=p.id).all()
