@@ -659,6 +659,11 @@ def api_pattern(id):
     pattern = Pattern.query.get_or_404(id)
     
     if request.method == 'DELETE':
+        # Explicit cleanup to avoid FK constraint errors (sqlite/postgres)
+        Alert.query.filter_by(pattern_id=pattern.id).delete(synchronize_session=False)
+        StreakHistory.query.filter_by(pattern_id=pattern.id).delete(synchronize_session=False)
+        PatternSubStats.query.filter_by(pattern_id=pattern.id).delete(synchronize_session=False)
+        PatternStats.query.filter_by(pattern_id=pattern.id).delete(synchronize_session=False)
         db.session.delete(pattern)
         db.session.commit()
         load_patterns_to_engine()
