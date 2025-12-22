@@ -252,13 +252,12 @@
         }
         .pattern-stat-box.current { background: #2196F3; color: #fff; }
         .pattern-stat-box.maximum { background: #9C27B0; color: #fff; }
-        .pattern-stat-box .stat-num { font-size: 18px; }
-        .pattern-stat-box .stat-lbl { font-size: 10px; opacity: 0.9; }
+
         .streak-table {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             font-size: 11px;
-            border: 1px solid #333;
+            margin-top: 10px;
             border-radius: 6px;
             overflow: hidden;
         }
@@ -268,7 +267,7 @@
             border-bottom: 1px solid #333;
             border-right: 1px solid #333;
         }
-        .streak-table .cell:nth-child(3n) { border-right: none; }
+        .streak-table .cell:nth-child(4n) { border-right: none; }
         .streak-table .cell.header { background: #1a1a2e; color: #48dbfb; font-weight: bold; }
         .streak-table .cell.green-bg { background: rgba(46, 213, 115, 0.2); color: #2ed573; }
         .streak-table .cell.red-bg { background: rgba(255, 71, 87, 0.2); color: #ff4757; }
@@ -1061,13 +1060,15 @@
 
                     const streakTableHtml = (p.streak_table || []).length > 0 ? `
                         <div class="streak-table">
-                            <div class="cell header">Streak</div>
-                            <div class="cell header">Trigger</div>
-                            <div class="cell header">Miss</div>
+                            <div class="cell header">Trigger Streak</div>
+                            <div class="cell header">Trigger Count</div>
+                            <div class="cell header">Miss Streak</div>
+                            <div class="cell header">Miss Count</div>
                             ${p.streak_table.map(row => `
-                                <div class="cell">${row.streak}</div>
-                                <div class="cell green-bg">${row.trigger_count}</div>
-                                <div class="cell red-bg">${row.miss_count}</div>
+                                <div class="cell">${row.trigger_streak ?? '--'}</div>
+                                <div class="cell green-bg">${row.trigger_count ?? 0}</div>
+                                <div class="cell">${row.miss_streak ?? '--'}</div>
+                                <div class="cell red-bg">${row.miss_count ?? 0}</div>
                             `).join('')}
                         </div>
                     ` : '<div style="color: #666; font-size: 11px; text-align: center;">No streak data yet</div>';
